@@ -56,9 +56,10 @@ class BayesianOptimization:
             opt_mu = np.max(mu)
 
         imp = opt_mu - sample_mu - self.xsi
-        Z = imp / sigma
-        EI = ((imp * norm.cdf(Z)) + (sigma * norm.pdf(Z)))
-        EI[sigma == 0.0] = 0.0
+        with np.errstate(divide='ignore', invalid='ignore'):
+            Z = imp / sigma
+            EI = ((imp * norm.cdf(Z)) + (sigma * norm.pdf(Z)))
+        EI[sigma <= 0] = 0.0
 
         X_next = self.X_s[np.argmax(EI)]
 
