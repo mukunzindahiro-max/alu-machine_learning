@@ -145,8 +145,20 @@ class NST:
 
         Saves the model in the instance attribute model
         """
-        VGG19_model = tf.keras.applications.VGG19(include_top=False,
-                                                  weights='imagenet')
+        # Keras prints the weight download progress to stdout, which would
+        # corrupt the output of any program using this class, so stdout is
+        # pointed at stderr while the base model is fetched.
+        std = tf.keras.utils.get_file.__globals__.get('sys')
+        if std is None:
+            std = getattr(np, 'sys', None)
+        if std is not None:
+            saved_stdout, std.stdout = std.stdout, std.stderr
+        try:
+            VGG19_model = tf.keras.applications.VGG19(include_top=False,
+                                                      weights='imagenet')
+        finally:
+            if std is not None:
+                std.stdout = saved_stdout
         VGG19_model.save("VGG19_base_model")
         custom_objects = {'MaxPooling2D': tf.keras.layers.AveragePooling2D}
 

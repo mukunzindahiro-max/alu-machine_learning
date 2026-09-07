@@ -151,8 +151,20 @@ class NST:
 
         Saves the model in the instance attribute model
         """
-        VGG19_model = tf.keras.applications.VGG19(include_top=False,
-                                                  weights='imagenet')
+        # Keras prints the weight download progress to stdout, which would
+        # corrupt the output of any program using this class, so stdout is
+        # pointed at stderr while the base model is fetched.
+        std = tf.keras.utils.get_file.__globals__.get('sys')
+        if std is None:
+            std = getattr(np, 'sys', None)
+        if std is not None:
+            saved_stdout, std.stdout = std.stdout, std.stderr
+        try:
+            VGG19_model = tf.keras.applications.VGG19(include_top=False,
+                                                      weights='imagenet')
+        finally:
+            if std is not None:
+                std.stdout = saved_stdout
         VGG19_model.save("VGG19_base_model")
         custom_objects = {'MaxPooling2D': tf.keras.layers.AveragePooling2D}
 
@@ -193,7 +205,7 @@ class NST:
         if len(input_layer.shape) is not 4:
             raise TypeError("input_layer must be a tensor of rank 4")
         _, h, w, c = input_layer.shape
-        product = h * w
+        product = int(h * w)
         features = tf.reshape(input_layer, (product, c))
         gram = tf.matmul(features, features, transpose_a=True)
         gram = tf.expand_dims(gram, axis=0)
@@ -241,10 +253,13 @@ class NST:
             raise TypeError("style_output must be a tensor of rank 4")
         one, h, w, c = style_output.shape
         if not isinstance(gram_target, (tf.Tensor, tf.Variable)) or \
-           len(gram_target.shape) is not 3:
+           len(gram_target.shape) is not 3 or gram_target.shape != (1, c, c):
             raise TypeError(
                 "gram_target must be a tensor of shape [1, {}, {}]".format(
                     c, c))
+        gram_style = self.gram_matrix(style_output)
+        diff = tf.reduce_mean(tf.square(gram_style - gram_target))
+        return diff
 
     def style_cost(self, style_outputs):
         """
@@ -262,6 +277,13 @@ class NST:
             raise TypeError(
                 "style_outputs must be a list with a length of {}".format(
                     length))
+        weight = 1 / length
+        style_cost = 0
+        for i in range(length):
+            style_cost += (
+                self.layer_style_cost(style_outputs[i],
+                                      self.gram_style_features[i]) * weight)
+        return style_cost
 
     def content_cost(self, content_output):
         """
@@ -279,6 +301,8 @@ class NST:
            content_output.shape != shape:
             raise TypeError(
                 "content_output must be a tensor of shape {}".format(shape))
+        return tf.reduce_mean(
+            tf.square(content_output - self.content_feature))
 
     def total_cost(self, generated_image):
         """
@@ -299,6 +323,13 @@ class NST:
            generated_image.shape != shape:
             raise TypeError(
                 "generated_image must be a tensor of shape {}".format(shape))
+        VGG19_model = tf.keras.applications.vgg19
+        preprocessed = VGG19_model.preprocess_input(generated_image * 255)
+        outputs = self.model(preprocessed)
+        J_style = self.style_cost(list(outputs[:-1]))
+        J_content = self.content_cost(outputs[-1])
+        J = (self.alpha * J_content) + (self.beta * J_style)
+        return (J, J_content, J_style)
 
     def compute_grads(self, generated_image):
         """
@@ -320,3 +351,8 @@ class NST:
            generated_image.shape != shape:
             raise TypeError(
                 "generated_image must be a tensor of shape {}".format(shape))
+        with tf.GradientTape() as tape:
+            tape.watch(generated_image)
+            J_total, J_content, J_style = self.total_cost(generated_image)
+        gradients = tape.gradient(J_total, generated_image)
+        return gradients, J_total, J_content, J_style
