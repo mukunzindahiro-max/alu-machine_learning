@@ -365,7 +365,9 @@ class NST:
             raise TypeError(
                 "generated_image must be a tensor of shape {}".format(shape))
         with tf.GradientTape() as tape:
-            tape.watch(generated_image)
+            # variables are watched automatically, plain tensors are not
+            if not isinstance(generated_image, tf.Variable):
+                tape.watch(generated_image)
             J_total, J_content, J_style, J_var = self.total_cost(
                 generated_image)
         gradients = tape.gradient(J_total, generated_image)
@@ -426,7 +428,13 @@ class NST:
         if beta2 < 0 or beta2 > 1:
             raise ValueError("beta2 must be in the range [0, 1]")
 
-        generated_image = tf.Variable(self.content_image)
+        # older TensorFlow releases only allow eager variables to be built
+        # through tf.contrib.eager
+        contrib = getattr(tf, 'contrib', None)
+        eager = getattr(contrib, 'eager', None)
+        variable = getattr(eager, 'Variable', tf.Variable)
+
+        generated_image = variable(self.content_image)
         optimizer = tf.train.AdamOptimizer(lr, beta1, beta2)
         best_cost = float('inf')
         best_image = None
@@ -434,14 +442,15 @@ class NST:
         for i in range(iterations + 1):
             grads, J_total, J_content, J_style, J_var = self.compute_grads(
                 generated_image)
-            cost = float(J_total)
+            cost = float(J_total.numpy())
             if cost < best_cost:
                 best_cost = cost
                 best_image = generated_image.numpy()
             if step is not None and (i % step == 0 or i == iterations):
                 print("Cost at iteration {}: {}, content {}, style {}, "
-                      "var {}".format(i, cost, float(J_content),
-                                      float(J_style), float(J_var)))
+                      "var {}".format(i, cost, float(J_content.numpy()),
+                                      float(J_style.numpy()),
+                                      float(J_var.numpy())))
             if i < iterations:
                 optimizer.apply_gradients([(grads, generated_image)])
                 clipped = tf.clip_by_value(generated_image, 0, 1)

@@ -352,7 +352,9 @@ class NST:
             raise TypeError(
                 "generated_image must be a tensor of shape {}".format(shape))
         with tf.GradientTape() as tape:
-            tape.watch(generated_image)
+            # variables are watched automatically, plain tensors are not
+            if not isinstance(generated_image, tf.Variable):
+                tape.watch(generated_image)
             J_total, J_content, J_style = self.total_cost(generated_image)
         gradients = tape.gradient(J_total, generated_image)
         return gradients, J_total, J_content, J_style
