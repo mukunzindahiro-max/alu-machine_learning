@@ -20,8 +20,14 @@ def variance(X, C):
         for each cluster
 
     return:
-        - var: total intra-cluster variance
+        - var: total intra-cluster variance, or None on failure
     """
+    if not isinstance(X, np.ndarray) or len(X.shape) != 2:
+        return None
+    if not isinstance(C, np.ndarray) or len(C.shape) != 2:
+        return None
+    if C.shape[0] < 1 or X.shape[1] != C.shape[1]:
+        return None
     var = np.sum((X - C[:, np.newaxis])**2, axis=-1)
     mean = np.sqrt(var)
     mini = np.min(mean, axis=0)

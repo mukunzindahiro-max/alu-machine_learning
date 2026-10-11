@@ -31,6 +31,9 @@ def optimum_k(X, kmin=1, kmax=None, iterations=1000):
         return None, None
     if not isinstance(kmin, int) or kmin <= 0:
         return None, None
+    if kmax is None:
+        # every point can be its own cluster at most
+        kmax = X.shape[0]
     if not isinstance(kmax, int) or kmax <= 0:
         return None, None
     if kmin >= kmax:
