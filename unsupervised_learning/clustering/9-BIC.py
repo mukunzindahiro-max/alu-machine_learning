@@ -10,43 +10,58 @@ def BIC(X, kmin=1, kmax=None, iterations=1000, tol=1e-5, verbose=False):
     """
     finds the best number of clusters for a GMM using the
     Bayesian Information Criterion
+
+    X: numpy.ndarray (n, d) containing the dataset
+        - n no. of data points
+        - d no. of dimensions for each data point
+    kmin: positive integer, smallest number of clusters to check, inclusive
+    kmax: positive integer, largest number of clusters to check, inclusive
+        if None, it becomes the largest number of clusters possible
+    iterations: positive integer, maximum iterations used by each model
+    tol: non-negative float, tolerance of the log likelihood
+    verbose: boolean that determines if the EM output should be printed
+
+    returns:
+        best_k, best_result, l, b or None, None, None, None on failure
+        - best_k: the number of clusters with the lowest BIC
+        - best_result: tuple of (pi, m, S) for the best number of clusters
+        - l: numpy.ndarray (kmax - kmin + 1) log likelihood of each size
+        - b: numpy.ndarray (kmax - kmin + 1) BIC value of each size
     """
     if not isinstance(X, np.ndarray) or len(X.shape) != 2:
         return None, None, None, None
-
-    if not isinstance(kmin, int) or kmin < 1:
+    n, d = X.shape
+    if not isinstance(kmin, int) or kmin < 1 or kmin >= n:
         return None, None, None, None
-
-    if not isinstance(kmax, int) or kmax < kmin:
+    if kmax is None:
+        kmax = n
+    if not isinstance(kmax, int) or kmax < 1 or kmax > n:
         return None, None, None, None
-
-    if not isinstance(iterations, int):
+    if kmax <= kmin:
         return None, None, None, None
-
-    if not isinstance(tol, float) or tol < 0:
+    if not isinstance(iterations, int) or iterations <= 0:
         return None, None, None, None
-
+    if not isinstance(tol, float) or tol <= 0:
+        return None, None, None, None
     if not isinstance(verbose, bool):
         return None, None, None, None
 
-    if kmax is None:
-        kmax = iterations
+    results = []
+    likelihoods = []
+    bics = []
 
-    n = X.shape[0]
-    prior_bic = 0
-    likelyhoods = bics = []
-    best_k = kmax
-    pi_prev = m_prev = S_prev = best_res = None
     for k in range(kmin, kmax + 1):
-        pi, m, S, g, ll = expectation_maximization(X, k, iterations, tol,
-                                                   verbose)
-        bic = k * np.log(n) - 2 * ll
-        if np.isclose(bic, prior_bic) and best_k >= k:
-            best_k = k - 1
-            best_res = pi_prev, m_prev, S_prev
-        pi_prev, m_prev, S_prev = pi, m, S
-        likelyhoods.append(ll)
-        bics.append(bic)
-        prior_bic = bic
+        pi, m, S, g, likelihood = expectation_maximization(
+            X, k, iterations, tol, verbose)
+        # k means, k covariance matrices that are symmetric, and the
+        # priors, of which the last is fixed by the others
+        parameters = (k * d) + (k * d * (d + 1) / 2) + (k - 1)
+        results.append((pi, m, S))
+        likelihoods.append(likelihood)
+        bics.append(parameters * np.log(n) - 2 * likelihood)
 
-    return best_k, best_res, np.asarray(likelyhoods), np.asarray(bics)
+    likelihoods = np.array(likelihoods)
+    bics = np.array(bics)
+    best = int(np.argmin(bics))
+
+    return kmin + best, results[best], likelihoods, bics

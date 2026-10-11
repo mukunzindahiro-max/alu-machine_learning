@@ -44,20 +44,19 @@ def expectation_maximization(X, k,
         return None, None, None, None, None
 
     pi, m, S = initialize(X, k)
-    g, l = expectation(X, pi, m, S)
-    prev_like = i = 0
+    g, likelihood = expectation(X, pi, m, S)
     msg = "Log Likelihood after {} iterations: {}"
-
-    for i in range(iterations):
-        if verbose and i % 10 == 0:
-            print(msg.format(i, total_log_like.round(5)))
-        pi, m, S = maximization(X, g)
-        g, total_log_like = expectation(X, pi, m, S)
-        if abs(prev_like - total_log_like) <= tol:
-            break
-        prev_like = total_log_like
-
     if verbose:
-        print(msg.format(i + 1, total_log_like.round(5)))
+        print(msg.format(0, likelihood.round(5)))
 
-    return pi, m, S, g, total_log_like
+    for i in range(1, iterations + 1):
+        pi, m, S = maximization(X, g)
+        g, updated = expectation(X, pi, m, S)
+        converged = abs(updated - likelihood) <= tol
+        if verbose and (i % 10 == 0 or converged or i == iterations):
+            print(msg.format(i, updated.round(5)))
+        likelihood = updated
+        if converged:
+            break
+
+    return pi, m, S, g, likelihood

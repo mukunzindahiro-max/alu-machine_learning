@@ -38,6 +38,9 @@ def expectation(X, pi, m, S):
     g = np.zeros((k, n))
     for i in range(k):
         g[i] = pi[i] * pdf(X, m[i], S[i])
-    g = g / np.sum(g, axis=0)
-    l = np.sum(np.log(np.sum(g, axis=0)))
-    return g, l
+    # the column sums are the marginal density of each point: they
+    # normalize g, and the likelihood sums their logs. Summing g after
+    # the division would only ever add up logs of 1
+    densities = np.sum(g, axis=0)
+    g = g / densities
+    return g, np.sum(np.log(densities))
